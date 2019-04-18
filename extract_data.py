@@ -1,3 +1,4 @@
+import argparse
 import csv
 import os
 
@@ -6,7 +7,7 @@ from bs4 import BeautifulSoup
 from tqdm import tqdm
 
 
-def parse_summary(inn_summary, extras, match_id, innings):
+def parse_summary(inn_summary, extras, match_id, innings, team_info):
     tmp = [i.split() for i in extras.upper()[:-1].split('(')[-1].split(',')]
     if extras == '0':
         extras = dict()
@@ -23,6 +24,8 @@ def parse_summary(inn_summary, extras, match_id, innings):
     return pd.Series({
         'Match ID': match_id,
         'Innings': innings,
+        'Team ID': team_info[0],
+        'Team': team_info[1],
         'Total': int(score[0]),
         'Wickets': wickets,
         'Overs': overs,
@@ -33,6 +36,11 @@ def parse_summary(inn_summary, extras, match_id, innings):
 if __name__ == '__main__':
     SUBFOLDER_HTML = 'Downloads'
     SUBFOLDER_SUMMARY = 'Match Results'
+    
+    # parser = argparse.ArgumentParser()
+    # parser.add_argument('-a', '--all', help='extract all downloaded data', action='store_true')
+    # # parser.add_argument('-f', '--force_live', help='force download live match data', action='store_true')
+    # args = parser.parse_args()
     
     dfs_batting = []
     dfs_bowling = []
@@ -52,6 +60,11 @@ if __name__ == '__main__':
             with open(f'{SUBFOLDER_HTML}/{file_name}', 'rb') as fr:
                 soup = BeautifulSoup(fr.read(), 'lxml')
             match_id = file_name.replace('.html', '')
+            
+            div_team_info = soup.find_all('div', {'class': 'cscore_truncate'})[:2]
+            team_info = [
+                (div.a['href'].split('/')[-2], div.span.text) for div in div_team_info
+            ]
             
             for inning, inning_id in enumerate(innings_id, start=1):
                 div_inning = soup.find('div', {'id': inning_id})
@@ -80,7 +93,7 @@ if __name__ == '__main__':
                 # Summary
                 extras = div_inning.find('div', {'class': 'wrap extras'}).find_all('div')[-1].text
                 inn_summary = div_inning.find('div', {'class': 'wrap total'}).find_all('div')[-1].text
-                summaries.append(parse_summary(inn_summary, extras, match_id, inning))
+                summaries.append(parse_summary(inn_summary, extras, match_id, inning, team_info[inning-1]))
     
     df_batting = pd.concat(dfs_batting, sort=False)
     df_bowling = pd.concat(dfs_bowling, sort=False)

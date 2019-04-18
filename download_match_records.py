@@ -23,12 +23,26 @@ def fetch_match_results(season, url, force_live=False):
         'Referer': r.url,
     }
     r = requests.get(urljoin(BASE_URL, next_url), headers=rh)
+    with open(f'{SUBFOLDER_HTML}/{season}.csv', 'wb') as f:
+        f.write(r.content)
     soup = BeautifulSoup(r.content, 'lxml')
     table = soup.find('table', {'class': 'engineTable'})
-    data = [['Season'] + [i.text for i in table.thead.tr.find_all('th')] + ['Match Link']]
+    
+    data = [['Season', 'Team 1 ID', 'Team 1', 'Team 2 ID', 'Team 2', 'Winner ID', 'Winner',
+        'Margin', 'Ground', 'Match Date', 'Match Link']]
     for tr in table.tbody.find_all('tr'):
         tds = tr.find_all('td')
-        tmp = [season] + [i.text for i in tds] + [tds[-1].a['href']]
+        
+        tmp = [season]
+        for k, i in enumerate(tds[:-1]):
+            if k < 3:
+                try:
+                    tmp.append(i.a['href'].split('/')[-1].replace('.html', ''))
+                except TypeError:
+                    tmp.append('')
+            tmp.append(i.text)
+        tmp.append(tds[-1].a['href'])
+        
         if tmp[3] == '-' and not force_live:
             continue
         data.append(tmp)
@@ -80,6 +94,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('-a', '--all', help='download all match data', action='store_true')
     parser.add_argument('-f', '--force_live', help='force download live match data', action='store_true')
+    parser.add_argument('-o', '--only_results', help='download only match results', action='store_true')
     args = parser.parse_args()
     
     os.makedirs(f'{SUBFOLDER_CSV}', exist_ok=True)
@@ -91,7 +106,8 @@ if __name__ == '__main__':
             for season, main_link in main_links.items():
                 print(season)
                 data, referer = fetch_match_results(season, main_link, force_live=args.force_live)
-                download_matches(data[1:], referer, force_live=args.force_live)
+                if not args.only_results:
+                    download_matches(data[1:], referer, force_live=args.force_live)
         else:
             season = datetime.now().year
             try:
@@ -100,4 +116,5 @@ if __name__ == '__main__':
             except FileNotFoundError:
                 downloaded = 0
             data, referer = fetch_match_results(season, main_links[season], force_live=args.force_live)
-            download_matches(data[downloaded:], referer, force_live=args.force_live)
+            if not args.only_results:
+                download_matches(data[downloaded:], referer, force_live=args.force_live)
